@@ -2,8 +2,7 @@ from tkinter import *
 from tkinter import messagebox
 from random import randint, choice, shuffle
 import pyperclip  # Package for copy/paste to/from clipboard
-import json
-
+import sqlite3 as sql
 
 # -----------Password Generator--------- #
 def pass_gen():
@@ -31,56 +30,55 @@ def pass_gen():
 
 
 # ---------------Data saving---------------#
-
 def add_info():
     site = site_entry.get().capitalize()
     username = username_entry.get()
     password = password_entry.get()
-    new_data = {site:
-        {
-            "E-mail:": username,
-            "Password:": password
-        }
-    }
+    params = (site, username, password)
     if len(site) == 0 or len(username) == 0 or len(password) == 0:
         messagebox.showerror(title="Empty field!", message="Please fill all data!")
     else:
-        check_box = messagebox.askokcancel(title="Information",
+        # Checking if entry exists
+        check_query = db.execute(f"SELECT id, site, username FROM passwords")
+        records=check_query.fetchall()
+        for row in records:
+            if str(row[1]) == site and str(row[2]) == username:
+                update_info = messagebox.askyesno(title="Error", message=f'{username} exists for {site}. Do you want to change the password?')
+                if update_info:
+                    db.execute(f"UPDATE passwords SET site=?, username = ?, password = ? WHERE id = {row[0]}", params)
+                    db.commit()
+                    break
+                else:
+                    break
+        else:
+            check_box = messagebox.askokcancel(title="Information",
                                            message=f"This is the data entered:\nSite:{site}\nUsername:{username}\nPassword:{password}\nIs everything correct?")
-        if check_box is True:
-            try:  # Reading old data
-                with open(file="Passwords.json", mode="r") as file:
-                    data = json.load(file)
-            except FileNotFoundError:  # Creating the file
-                with open(file="Passwords.json", mode="w") as file:
-                    json.dump(new_data, fp=file, indent=4)
-            else:
-                with open(file="Passwords.json", mode="r") as file:
-                    data.update(new_data)  # Updating old data with new data
-                with open(file="Passwords.json", mode="w") as file:
-                    json.dump(data, fp=file, indent=4)  # Converting new data to json
-            finally:
+            if check_box is True:
+
+                db.execute('INSERT INTO passwords(site, username, password) VALUES(?,?,?)', params)
+                db.commit()
                 site_entry.delete(0, END)
                 username_entry.delete(0, END)
                 password_entry.delete(0, END)
+            else:
+                pass
 
 
 # -----------Search for password----------- #
 def search_data():
-    needed_data = site_entry.get().capitalize()
-    try:
-        with open(file="Passwords.json", mode="r") as file:
-            available_data = json.load(file)
-    except FileNotFoundError:
-        messagebox.showerror(title="No data found", message=f"No data was found for {needed_data}")
+    needed_site = site_entry.get().capitalize()
+    needed_username = username_entry.get()
+    check_query = db.execute(f"SELECT * FROM passwords")
+    records = check_query.fetchall()
+    if len(site) == 0 or len(username) == 0:
+        messagebox.showerror(title="Empty field!", message="Please fill site and username!")
     else:
-        if needed_data in available_data:
-            email = available_data[needed_data]["E-mail:"]
-            password = available_data[needed_data]["Password:"]
-            messagebox.showinfo(title=f"Credentials for {needed_data}", message=f"E-mail:{email}\nPassword:{password}")
+        for row in records:
+            if str(row[1]) == needed_site and str(row[2]) == needed_username:
+                messagebox.showinfo(title=f"Credentials for {row[1]}", message=f"E-mail:{row[2]}\nPassword:{row[3]}")
+                break
         else:
-            messagebox.showerror(title="No data found", message=f"No data was found for {needed_data}")
-
+            messagebox.showerror(title="No data found", message=f"No data was found for {needed_site}")
 
 # -------------User interface------------- #
 
@@ -122,4 +120,8 @@ add_button = Button(text="Add info", font=(FONT, 10, "normal"), width=46, comman
 add_button.grid(column=1, row=4, columnspan=2)
 search_button = Button(text="Search", font=(FONT, 10, "normal"), width=13, command=search_data)
 search_button.grid(column=2, row=1)
-window.mainloop()
+
+if __name__ == "__main__":
+    db = sql.Connection("pass-manager.db")
+    db.execute("CREATE TABLE IF NOT EXISTS passwords (id  INTEGER PRIMARY KEY NOT NULL, site, username, password)")
+    window.mainloop()
